@@ -12,9 +12,9 @@
 	asm volatile ("ror %0" : "+r" (sendbyte) : "r" (sendbyte) : ); 	\
 }
 
-PWMShifter pwmShifter(0);
+PWMShifter pwmShifter;
 
-PWMShifter::PWMShifter(uint8_t shit) {
+PWMShifter::PWMShifter() {
 	frequency = 0;
 	steps = 0;
 	numRegisters = 0;
@@ -35,17 +35,17 @@ void PWMShifter::init_SPI() {
 }
 
 void PWMShifter::init_timer1(uint8_t pwmFrequency, uint16_t pwmSteps) {
-	// Configure timer1 in CTC mode: clear the timer on compare match
+	// Configure timer1 in CTC mode: clear timer on compare match
 	TCCR1A &= ~((1<<WGM10) | (1<<WGM11));
 	TCCR1B &= ~(1<<WGM13);
 	TCCR1B |= (1<<WGM12);
 	
-	// Select clock source: internal I/O clock, without a prescaler
+	// Select clock source: internal I/O clock, no prescaler
 	TCCR1B |= (1<<CS10);
 	TCCR1B &= ~((1<<CS11) | (1<<CS12));
 
 	// Set timer limit
-	OCR1A = (uint16_t)((float)F_CPU / ((float)pwmFrequency * (float)pwmSteps)) - 1;
+	OCR1A = F_CPU / (pwmFrequency * pwmSteps) - 1;
 }
 
 void PWMShifter::init(uint8_t *buff, uint8_t pwmFrequency, uint16_t pwmSteps, uint8_t registers) {
@@ -90,10 +90,10 @@ void PWMShifter::set_all(uint8_t value) {
 }
 
 ISR(TIMER1_COMPA_vect) {
-	pwmShifter.process_ISR();
+	pwmShifter._process_ISR();
 }
 
-void PWMShifter::process_ISR() {
+void PWMShifter::_process_ISR() {
 	sei(); //enable interrupt nesting to prevent disturbing other interrupt functions
 
 	uint8_t *outputPnt = &buffer[numOutputs];

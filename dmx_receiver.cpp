@@ -32,10 +32,10 @@ void DMXReceiver::stop() {
 }
 
 ISR(USART_RX_vect) {
-	dmxReceiver.process_ISR();
+	dmxReceiver._process_ISR();
 }
 
-void DMXReceiver::process_ISR() {
+void DMXReceiver::_process_ISR() {
 	uint8_t uState = UCSR0A;
 	uint8_t rxByte = UDR0;
 

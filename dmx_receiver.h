@@ -18,12 +18,11 @@ class DMXReceiver {
 	public:
 		DMXReceiver();
 		
-		void        init         (uint8_t *buffer, uint8_t dmxMode, uint8_t numChannels);
-		void        start        ();
-		void        stop         ();
-		void        set_callback (void (*callback)()) { _isrCallback = callback; }
-		void        set_channel  (uint16_t chan)      { _channel = chan; }
-		inline void process_ISR  ();
+		void init         (uint8_t *buffer, uint8_t dmxMode, uint8_t numChannels);
+		void start        ();
+		void stop         ();
+		void set_callback (void (*callback)()) { _isrCallback = callback; }
+		void set_channel  (uint16_t chan)      { _channel = chan; }
 		
 	private:
 		enum {IDLE, BREAK, START, RECORDING};
@@ -35,6 +34,7 @@ class DMXReceiver {
 		uint16_t  _numChannels;
 		uint16_t  _channel;
 		
+		inline void _process_ISR(); // Can it be private??? To be tested
 		void (*_isrCallback)();
 };
 
