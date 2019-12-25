@@ -1,13 +1,10 @@
-/* MCU clock frequency (Hz) */
-#define F_CPU 16000000UL
-
 /* EEPROM address where to save setting */
 #define EEPROM_SETTING_ADDR 0x20
 
-/* How many "frames" to wait before saving to eeprom and deactivating display */
-#define DISPLAY_TIMEOUT 1000       // 1000 x ~5ms = ~~5s
+/* How many frames (~5ms) to wait before saving to eeprom and deactivating display */
+#define DISPLAY_TIMEOUT 1000       // 1000 = ~5s
 
-/* Power/Activity LED blink cycle length */
+/* Power/activity LED blink cycle length */
 #define ACTIVITY_LED_CYCLE_LENGTH 12
 
 /* Amount of daisy-chained 8-bit shift registers */
@@ -19,144 +16,156 @@
 /* PWM steps */
 #define PWM_STEPS 256
 
-/* PWM shifter latch pin */
-#define SHIFTER_LATCH_PORT &PORTC
-#define SHIFTER_LATCH_DDR  &DDRC
-#define SHIFTER_LATCH_BIT  2
 
-
-#define DMX_NUM_CHANNELS 8 * NUM_SHIFT_REGISTERS
-#define DMX_MAX_CHANNEL  512 - DMX_NUM_CHANNELS + 1
+#define FRAME_TIMEOUT     F_CPU / 10667
+#define DIGIT_TIMEOUT     FRAME_TIMEOUT / 3
+#define DMX_NUM_CHANNELS  8 * NUM_SHIFT_REGISTERS
+#define DMX_MAX_CHANNEL   512 - DMX_NUM_CHANNELS + 1
 
 
 #include <avr/eeprom.h>
 #include <util/delay.h>
-#include "AVRage/AVRage.h"
+#include "Button.h"
 #include "dmx_receiver.h"
 #include "pwm_shifter.h"
 
 
 // Function prototypes
-void     display_digit      (DigitalPin *cathode, uint8_t n);
-void     increase_channel   ();
-void     decrease_channel   ();
-void     dmx_frame_received ();
-uint16_t load_setting       ();
-void     save_setting       (uint16_t channel);
+void display_digits     ();
+void increase_channel   ();
+void decrease_channel   ();
+void dmx_frame_received ();
 
 
-uint16_t dmxChannel       = 1;
+uint16_t dmxChannel;
 uint8_t  displayActive    = 1;
 uint8_t  activityLedPhase = 0;
 
-const uint8_t digit[] = {
-	0b01111110, 0b00001100, 0b10110110, 0b10011110, 0b11001100,
-	0b11011010, 0b11111010, 0b00001110, 0b11111110, 0b11011110
-};
-
 
 int main(void) {
+	// Display anodes (all outputs except RX, all low)
+	DDRD  = 0b11111110;
+	PORTD = 0b00000000;
+	
+	// Display cathodes (outputs, high)
+	DDRB  |= ((1<<PINB0) | (1<<PINB1) | (1<<PINB2));
+	PORTB |= ((1<<PINB0) | (1<<PINB1) | (1<<PINB2));
+
+	// Power/activity LED pin (output, high)
+	DDRC  |= (1<<PINC5);
+	PORTC |= (1<<PINC5);
+	
 	uint16_t prevChannel;
 	uint16_t frameCount = 0;
-
 	uint8_t dmxValues[DMX_NUM_CHANNELS];
-
-	// Port D is all outputs, except RX
-	DDRD = 0b11111110;
-
-	DigitalPin ledPin(PIN_C5, OUTPUT, HIGH);
-
-	DigitalPin displayCathode[] = {
-		DigitalPin(PIN_B0, OUTPUT, HIGH),
-		DigitalPin(PIN_B1, OUTPUT, HIGH),
-		DigitalPin(PIN_B2, OUTPUT, HIGH)
-	};
 	
-	Button   channelUpButton(PIN_C0, increase_channel);
-	Button channelDownButton(PIN_C1, decrease_channel);
+	Button   channelUpButton(&DDRC, &PORTC, &PINC, PINC0, increase_channel);
+	Button channelDownButton(&DDRC, &PORTC, &PINC, PINC1, decrease_channel);
 
-	// Load saved setting from eeprom
-	dmxChannel = load_setting();
+	// Load setting from EEPROM
+	uint16_t ch = eeprom_read_word((uint16_t*)EEPROM_SETTING_ADDR);
+	dmxChannel = (ch && ch <= DMX_MAX_CHANNEL) ? ch : 1;
 	
 	// Start PWM shifter
 	pwmShifter.init(&dmxValues[0], PWM_FREQUENCY, PWM_STEPS, NUM_SHIFT_REGISTERS);
-	pwmShifter.set_latch(SHIFTER_LATCH_DDR, SHIFTER_LATCH_PORT, SHIFTER_LATCH_BIT);
+	pwmShifter.set_latch(&DDRC, &PORTC, PINC2);
 	pwmShifter.start();
 	
 	// Start DMX receiver
-	dmxReceiver.init(&dmxValues[0], DMX512, DMX_NUM_CHANNELS);
-	dmxReceiver.set_callback(dmx_frame_received);
+	dmxReceiver.init(&dmxValues[0], DMX_NUM_CHANNELS);
+	dmxReceiver.set_rx_callback(dmx_frame_received);
 	dmxReceiver.set_channel(dmxChannel);
 	dmxReceiver.start();
 
-	for (;;) {
+	while (true) {
+		// prevChannel must be set before updating buttons
 		prevChannel = dmxChannel;
 
 		channelUpButton.update();
 		channelDownButton.update();
 		
 		if (displayActive) {
-			if (dmxChannel != prevChannel) {
-				if      (dmxChannel > DMX_MAX_CHANNEL) dmxChannel = 1;
-				else if (dmxChannel < 1)               dmxChannel = DMX_MAX_CHANNEL;
-				dmxReceiver.set_channel(dmxChannel);
-				frameCount = 0;
-			}
+			if (frameCount < DISPLAY_TIMEOUT) {
+				if (dmxChannel != prevChannel) {
+					if      (dmxChannel > DMX_MAX_CHANNEL) dmxChannel = 1;
+					else if (dmxChannel < 1)               dmxChannel = DMX_MAX_CHANNEL;
+					dmxReceiver.set_channel(dmxChannel);
+					frameCount = 0;
+				}
 
-			else if (frameCount > DISPLAY_TIMEOUT) {
-				save_setting(dmxChannel);
-				displayActive = 0;
-				frameCount = 0;
+				else  {
+					frameCount++;
+				}
+				
+				display_digits();
 			}
 			
 			else {
-				display_digit(&displayCathode[0], dmxChannel / 100);
-				display_digit(&displayCathode[1], dmxChannel / 10 % 10);
-				display_digit(&displayCathode[2], dmxChannel % 10);
-			
-				frameCount++;
+				// Save setting to EEPROM
+				eeprom_update_word((uint16_t*)EEPROM_SETTING_ADDR, dmxChannel);
+				
+				displayActive = 0;
+				frameCount = 0;
 			}
 		}
 		else {
-			_delay_us(1500);
+			_delay_us(FRAME_TIMEOUT);
 		}
 		
 		if (activityLedPhase > 0) {
-			ledPin.write(activityLedPhase < ACTIVITY_LED_CYCLE_LENGTH / 2);
+			if (activityLedPhase < ACTIVITY_LED_CYCLE_LENGTH / 2) {
+				PORTC &= ~(1<<PINC5);
+			}
+			else {
+				PORTC |= (1<<PINC5);
+			}
+			
 			activityLedPhase--;
 		}
 	}
 
-	return 0;
+	return 1;
 }
 
-void display_digit(DigitalPin *cathode, uint8_t n) {
-	PORTD = digit[n];
-	
-	(*cathode).write(LOW);
-	_delay_us(500);
-	(*cathode).write(HIGH);
+
+void display_digits() {
+	static uint8_t digit[] = {
+		0b01111110, 0b00001100, 0b10110110, 0b10011110, 0b11001100,
+		0b11011010, 0b11111010, 0b00001110, 0b11111110, 0b11011110
+	};
+
+	// Display units
+	PORTD = digit[dmxChannel % 10];
+	PORTB &= ~(1<<PINB2);
+	_delay_us(DIGIT_TIMEOUT);
+	PORTB |= (1<<PINB2);
+
+	// Display tens
+	PORTD = digit[dmxChannel / 10 % 10];
+	PORTB &= ~(1<<PINB1);
+	_delay_us(DIGIT_TIMEOUT);
+	PORTB |= (1<<PINB1);
+
+	// Display hundreds
+	PORTD = digit[dmxChannel / 100];
+	PORTB &= ~(1<<PINB0);
+	_delay_us(DIGIT_TIMEOUT);
+	PORTB |= (1<<PINB0);
 }
+
 
 void increase_channel() {
 	if (displayActive) dmxChannel++;
 	else displayActive = 1;
 }
 
+
 void decrease_channel() {
 	if (displayActive) dmxChannel--;
 	else displayActive = 1;
 }
 
+
 void dmx_frame_received() {
-	if (activityLedPhase == 0) activityLedPhase = ACTIVITY_LED_CYCLE_LENGTH;
-}
-
-uint16_t load_setting() {
-	uint16_t channel = eeprom_read_word((uint16_t*)EEPROM_SETTING_ADDR);
-	return (channel != 0 && channel <= DMX_MAX_CHANNEL) ? channel : 1;
-}
-
-void save_setting(uint16_t channel) {
-	eeprom_update_word((uint16_t*)EEPROM_SETTING_ADDR, channel);
+	if (!activityLedPhase) activityLedPhase = ACTIVITY_LED_CYCLE_LENGTH;
 }

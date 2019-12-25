@@ -8,14 +8,14 @@ DMXReceiver::DMXReceiver() {
 	_numChannels = 8;
 }
 
-void DMXReceiver::init(uint8_t *buff, uint8_t dmxMode, uint8_t numChannels) {
+void DMXReceiver::init(uint8_t *buff, uint8_t numChannels) {
 	stop();
 	_buffer = buff;
 	_numChannels = numChannels;
 	
 	cli();
 	UBRR0H  = 0;
-	UBRR0L  = dmxMode;
+	UBRR0L  = (F_CPU / ( 250000 * 8)) - 1;
 	UCSR0A |= (1<<U2X0);
 	UCSR0C |= (3<<UCSZ00) | (1<<USBS0);
 	sei();

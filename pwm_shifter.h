@@ -17,20 +17,17 @@ class PWMShifter {
 		void set_all   (uint8_t value);
 
 	private:
-		uint8_t          *buffer;
-		uint8_t           frequency;
-		uint16_t          steps;
-		uint8_t           numRegisters;
-		uint8_t           numOutputs;
-		uint16_t          counter;
-		volatile uint8_t *latchDDR;
-		volatile uint8_t *latchPORT;
-		uint8_t           latchBit;
+		uint8_t          *_buffer;
+		uint8_t           _frequency;
+		uint16_t          _steps;
+		uint8_t           _numRegisters;
+		uint8_t           _numOutputs;
+		uint16_t          _counter;
+		volatile uint8_t *_latchDDR;
+		volatile uint8_t *_latchPORT;
+		uint8_t           _latchMask;
 		
 		inline void _process_ISR();
-
-		static void init_SPI();
-		static void init_timer1(uint8_t pwmFrequency, uint16_t pwmSteps);
 };
 
 extern PWMShifter pwmShifter;
