@@ -96,8 +96,6 @@ ISR(TIMER1_COMPA_vect) {
 
 
 void PWMShifter::_process_ISR() {
-	static uint8_t spif = (1<<SPIF);
-	
 	sei();  //enable interrupt nesting to prevent disturbing other interrupt routines
 
 	uint8_t *outputPnt = &_buffer[_numOutputs];
@@ -120,12 +118,12 @@ void PWMShifter::_process_ISR() {
 		add_one_pin_to_byte(sendbyte, count, --outputPnt);
 		add_one_pin_to_byte(sendbyte, count, --outputPnt);
 
-		while (!(SPSR & spif));
+		while (!(SPSR & (1<<SPIF)));
 
 		SPDR = sendbyte;
 	}
 	
-	while (!(SPSR & spif));
+	while (!(SPSR & (1<<SPIF)));
 
 	// Re-enable (update) shift registers outputs
 	*_latchPORT |= _latchMask;
