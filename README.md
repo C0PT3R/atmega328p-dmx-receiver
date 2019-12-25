@@ -1,3 +1,6 @@
+# VERY IMPORTANT NOTICE!!!
+I've highly modified this code recently, but didn't test it at all. I'm currently in the process of re-building the circuit to be able to test it. Use at your own risk.
+
 # Atmega328P DMX receiver with PWM outputs
 
 - Uses native USART module to decode DMX512 frames.
