@@ -2,7 +2,8 @@
 
 - Uses native USART module to decode DMX512 frames.
 - Uses native SPI module to produce PWM signals through chained serial-in/parallel-out 8-bit shift registers.
-- Uses a three digits 7-segment display and two buttons to select DMX channel.
+- Uses a three digits 7-segment display and two buttons to select DMX channel. Display automatically shuts down after a few seconds of inactivity.
+- Saves setting on internal EEPROM.
 - Doesn't use the Arduino library, nor its bootloader.
 
 Demo: https://www.youtube.com/watch?v=NsYhHazGQkg
