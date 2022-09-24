@@ -1,7 +1,7 @@
 # Atmega328P DMX receiver with PWM outputs
 
-- Uses native USART module to decode standard DMX512 frames.
-- Uses native SPI module to produce PWM signals through chained 8-bit shift registers.
+- Uses hardware USART to decode standard DMX512 frames.
+- Uses hardware SPI to produce PWM signals through chained 8-bit shift registers.
 - Uses a three digits 7-segments display and two buttons to select DMX channel.
 - All outputs are fully independent.
 - Display automatically shuts down after a few seconds of inactivity.
